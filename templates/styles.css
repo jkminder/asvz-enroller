@@ -1,0 +1,9 @@
+.logout-button {
+    display: block;
+    margin: 0 auto;
+}
+.center-block {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}

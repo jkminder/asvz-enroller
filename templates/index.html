@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+<html>
+<head>
+    <style>
+        body {
+            margin: 1rem 0;
+            height: 100vh;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%' height='24'%3E%3Cdefs%3E%3Cpattern id='bg' patternUnits='userSpaceOnUse' width='130' height='50px'%3E%3Cpath fill='whitesmoke' d='M36.27156,35.31569h-6.6737l-1.03442,3.8314a1.88039,1.88039,0,0,1-.41377.83291h9.57676a1.88039,1.88039,0,0,1-.41377-.83291ZM31.05273,30.085H34.83s-1.76853-10.18152-1.80857-10.54134c-.08008.55972-1.96874,10.54134-1.96874,10.54134M100.77287.0002H6.24658A6.25491,6.25491,0,0,0,0,6.237v27.5061A6.2549,6.2549,0,0,0,6.24658,39.98H22.26346a1.04476,1.04476,0,0,1,0-.83291L29.53112,14.293a1.401,1.401,0,0,1,1.48823-1.19939h4.33791A1.401,1.401,0,0,1,36.8455,14.293l7.20092,24.85411a1.04478,1.04478,0,0,1,0,.83291h6.39341c-3.63716-1.16608-4.98525-3.65149-4.98525-6.16355v-.87289c0-.83958.32034-1.20606,1.16122-1.20606h4.17774c.84089,0,1.12118.35982,1.12118,1.20606,0,1.84573,1.56832,2.52539,3.53039,2.52539s3.57043-.66633,3.57043-2.52539V32.144c0-1.44594-1.9287-2.12559-3.4503-2.66532l-5.973-2.16557a5.997,5.997,0,0,1-3.7306-5.33064V19.62362c0-3.44493,2.08887-6.85654,9.5167-6.85654s9.67687,3.40495,9.67687,6.85654v.87956c0,.83958-.32034,1.20606-1.16122,1.20606H59.72295c-.84089,0-1.12118-.35982-1.12118-1.20606,0-1.84573-1.288-2.51206-3.13664-2.51206s-3.17.66633-3.17,2.52539v.3998a1.83252,1.83252,0,0,0,1.288,1.73912l6.74711,2.28551c2.96979.99949,5.21216,3.08511,5.21216,6.05028v2.84523c0,2.51206-1.30137,4.99747-4.91852,6.16355H74.305a1.93746,1.93746,0,0,1-.44714-.83291l-7.281-24.8741c-.24025-.75962.04-1.19939.88093-1.19939h4.73833A1.3339,1.3339,0,0,1,73.59757,14.293l4.00422,17.75769L81.77953,14.293a1.33453,1.33453,0,0,1,1.40815-1.19939h4.33791c.84088,0,1.12118.43978.88093,1.19939L81.1522,39.14709a1.981,1.981,0,0,1-.44714.83291h9.2097a1.33292,1.33292,0,0,1-.20021-.79293V36.062a1.47345,1.47345,0,0,1,.20021-.7996L99.258,18.50418h-7.6614c-.84088,0-1.20794-.31984-1.20794-1.15942V14.213c0-.83957.36038-1.11943,1.20794-1.11943h14.4152a1.201,1.201,0,0,1,.981.3265V6.237A6.2553,6.2553,0,0,0,100.77289.0002M97.66295,34.93588h9.33651V18.21766Z'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100%' height='100%' fill='url(%23bg)'/%3E%3C/svg%3E");
+            background-repeat: repeat-x;
+            background-size: cover;
+        }
+    </style>   
+    <title>Login</title>
+</head>
+<body>
+<div class="container h-100">
+    <div class="row h-100 justify-content-center align-items-center">
+        <div class="col-md-6">
+            <form class="bg-light p-5 rounded" method="post" action="/login">
+                <div class="form-group">
+                {{ form.username.label(class="form-control-label") }}
+                {{ form.username(class="form-control") }}
+            </div>
+            <div class="form-group">
+                {{ form.password.label(class="form-control-label") }}
+                {{ form.password(class="form-control") }}
+            </div>
+            <button type="submit" class="btn btn-primary">Submit</button>
+        </form>
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+  
+    </div>
+</div>
+</body>
