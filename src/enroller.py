@@ -22,6 +22,11 @@ from loguru import logger
 from apscheduler.schedulers.background import BackgroundScheduler
 import pytz
 
+
+"""
+This is heavily adapted from "https://github.com/fbuetler/asvz-bot"
+"""
+
 TIMEFORMAT = "%H:%M"
 
 LESSON_BASE_URL = "https://schalter.asvz.ch"
