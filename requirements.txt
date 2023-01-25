@@ -1,0 +1,11 @@
+loguru
+selenium
+python-telegram-bot
+flask
+apscheduler
+flask-login
+Flask-SQLAlchemy
+passlib
+wtforms
+webdriver-manager
+cryptography

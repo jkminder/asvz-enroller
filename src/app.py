@@ -3,9 +3,16 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from passlib.hash import sha256_crypt
 from wtforms import Form, StringField, validators, PasswordField, SelectField
 import secrets
+from loguru import logger
 from flask_sqlalchemy import SQLAlchemy
-from enroller import ORGANISATIONS
-from utils import load_token, encrypt
+
+# Hack to fix dependency issues for create_user
+# TODO: Make this better!
+if __name__ == "__main__":
+    from utils import load_token, encrypt
+    from enroller import ORGANISATIONS
+else:
+    ORGANISATIONS = {}
 
 class LoginForm(Form):
     username = StringField('Username', [validators.DataRequired()])
@@ -19,8 +26,8 @@ class ASVZCredentialsForm(Form):
 class AccessToken(Form):
     access_token = StringField('Access Token', render_kw={'readonly': True})
     telegram_account = StringField('Linked Telegram Account', render_kw={'readonly': True})
+
 app = Flask(__name__)
-app.secret_key = '3Bhk8D0n3GxPxMtwzp7TBA'
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///asvz.db"
 # initialize the app with the extension
 
@@ -133,4 +140,5 @@ def logout():
 if __name__ == '__main__':
     global app_secret
     app_secret = load_token('secret.txt')
-    app.run(debug=True)
+    app.secret_key = app_secret
+    app.run(debug=True, host= '0.0.0.0')    

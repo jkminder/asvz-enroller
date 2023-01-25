@@ -4,10 +4,11 @@ from getpass import getpass
 import sys
 import secrets
 from passlib.hash import sha256_crypt
-from flask import current_app
-from app import db, User
-from app import app as flask_app
+from flask import current_app, Flask
+from src.app import db, User
+from src.app import app as flask_app
 
+# initialize the app with the extension
 def main():
     """Main entry point for script."""
     with flask_app.app_context():

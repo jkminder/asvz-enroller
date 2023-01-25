@@ -17,9 +17,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.utils import ChromeType
+from webdriver_manager.core.utils import ChromeType
 from loguru import logger
 from apscheduler.schedulers.background import BackgroundScheduler
+import pytz
 
 TIMEFORMAT = "%H:%M"
 
@@ -89,6 +90,9 @@ class AsvzEnroller:
         options = Options()
         options.add_argument("--private")
         options.add_argument("--headless")
+        options.add_argument('--no-sandbox')
+        options.add_argument('--window-size=1920,1080')
+        options.add_argument('--disable-gpu')
         options.add_experimental_option("prefs", {"intl.accept_languages": "de"})
         return webdriver.Chrome(
             service=Service(chromedriver),
@@ -259,7 +263,9 @@ class AsvzEnroller:
                         "Place was already taken in the meantime. Rechecking for available places."
                     )
                     continue
-
+                except Exception as e:
+                    logger.error(e)
+                    raise e
                 logger.info("Successfully enrolled. Train hard and have fun!")
                 return True
 
@@ -299,6 +305,7 @@ class AsvzEnroller:
                 self.lesson_start = datetime.strptime(
                     lesson_start_raw, "%d.%m.%Y %H:%M"
                 )
+                self.lesson_start.replace(tzinfo=pytz.timezone("CET"))
                 day = timedelta(days = 1)
                 self.enrollment_start = self.lesson_start - day
             except ValueError as e:
@@ -448,14 +455,14 @@ def get_chromedriver():
 
     return webdriver_manager.install()
 
-def verify_login(username, password):
+def verify_login(username, password, organisation):
     chrome_driver = get_chromedriver()
-    creds = CredentialsManager("ETH", username, password, False)
+    creds = CredentialsManager(organisation, username, password, False)
     return AsvzEnroller.check_login(chrome_driver, creds.get())
 
-def get_enroller(lesson_url, username, password):
+def get_enroller(lesson_url, username, password, organisation):
     chrome_driver = get_chromedriver()
-    creds = CredentialsManager("ETH", username, password, False)
+    creds = CredentialsManager(organisation, username, password, False)
     enroller = AsvzEnroller(lesson_url, creds.get())
     enroller.setup(chrome_driver)
     return enroller

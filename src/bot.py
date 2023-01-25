@@ -13,8 +13,9 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.executors.pool import ProcessPoolExecutor
 import re
 from datetime import datetime
+import pytz
 
-from enroller import verify_login, LESSON_BASE_URL, get_enroller
+from enroller import verify_login, LESSON_BASE_URL, get_enroller, CREDENTIALS_UNAME
 from utils import decrypt, load_token
 from app import db, User, app as flask_app
 
@@ -37,7 +38,7 @@ jobstores = {
 executors = {
     'default': ProcessPoolExecutor(5)
 }
-scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors)
+scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, timezone=pytz.timezone("CET"))
 bot_token = load_token("bot-token.txt")
 app_secret = load_token("secret.txt")
 #################
@@ -83,6 +84,7 @@ def job_summary(job):
     return enroller_summary(job.args[0])
 
 def enroll(enroller, chat_id):
+    logger.info(f"{enroller.creds[CREDENTIALS_UNAME]} - Started enrollment for {enroller_summary(enroller)}")
     try:
         enroller.enroll()
     except Exception as e:
@@ -92,14 +94,15 @@ def enroll(enroller, chat_id):
         response = Response(chat_id, f"You have been successfully enrolled for {enroller_summary(enroller)}!")
     asyncio.run(send_message(response))
 
-def initialise_job(lesson_url, user, password, chat_id):
-    logger.info("Got job {} from user {}.".format(lesson_url, user))
-    enroller = get_enroller(lesson_url, user, decrypt(password, app_secret))
+def initialise_job(lesson_url, user, password, organisation, chat_id):
+    enroller = get_enroller(lesson_url, user, decrypt(password, app_secret), organisation)
+    logger.info(f"{user} - Job: {enroller_summary(enroller)} - Exec: {enroller.enrollment_start} ")
     if enroller.enrollment_start < datetime.today():
-        logger.info("Enrollment already started.")
+        logger.info(f"{user} - Enrollment already started.")
         scheduler.add_job(enroll, args=(enroller, chat_id))
     else:
         scheduler.add_job(enroll, args=(enroller, chat_id), trigger='date', run_date=enroller.enrollment_start)
+        
 
 def user_authorized(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -198,7 +201,7 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text = f"Welcome {db_user.username}! You are now authorized. Verifying your login credentials..."
                 logger.info(f"User {db_user.username} authorized.")
                 await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
-                verified = verify_login(db_user.asvz_username, decrypt(db_user.asvz_password, app_secret))
+                verified = verify_login(db_user.asvz_username, decrypt(db_user.asvz_password, app_secret), db_user.asvz_organisation)
                 if verified == 0:
                     reset_token(db_user)
                     await context.bot.send_message(chat_id=update.effective_chat.id, text="Your login credentials are not valid and your authorization has been retracted. Please visit https://asvz.jkminder.ch to change them and reauthorize.")
@@ -208,15 +211,16 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.send_message(chat_id=update.effective_chat.id, text="Your login credentials have been verified. Your account is now linked to this telegram account. Send /help for more information on how to use me.")
         return
     else:
-        logger.info(f"Job received: {update.message.text} from {update.effective_user.username}")
+        logger.info(f"{update.effective_user.username} - Job received: {update.message.text}")
         if db_user.verified == -1:
+            logger.info(f"{update.effective_user.username} – Job invalid.")
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Your login credentials are not yet verified. This might take some minutes. Resubmit the job in a few minutes. You will be notified when you're credentials have been verified.")    
         elif LESSON_BASE_URL+"/tn/lessons/" in update.message.text:
             # get full url from message with regex(starts with LESSON_BASE_URL) 
             url = re.search(f"https:\/\/schalter\.asvz\.ch\/tn\/lessons/\d*", update.message.text).group(0)
             print(url)
             if url:
-                initialise_job(url, db_user.asvz_username, db_user.asvz_password, chat.id)
+                initialise_job(url, db_user.asvz_username, db_user.asvz_password, db_user.asvz_organisation, chat.id)
                 await context.bot.send_message(chat_id=update.effective_chat.id, text="Job submitted.")
         else:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Could not find a lesson url in your message. It should look like {LESSON_BASE_URL}/tn/lessons/ followed by some number.")
