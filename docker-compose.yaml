@@ -1,12 +1,17 @@
-version: "3"
+version: "3.2"
 services:
   web:
     image: asvz-enroller
     build: .
+    shm_size: 2gb
     container_name: asvz-enroller
     restart: always
     ports:
         - "5090:5000"
     volumes:
-      - instance/:/instance/
-      - logs/:/logs/
+        - type: bind
+          source: ./instance/
+          target: /instance/
+        - type: bind
+          source: ./logs/
+          target: /logs/
