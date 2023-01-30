@@ -15,7 +15,7 @@ import re
 from datetime import datetime
 import pytz
 
-from enroller import verify_login, LESSON_BASE_URL, get_enroller, CREDENTIALS_UNAME
+from enroller import verify_login, LESSON_BASE_URL, get_enroller, CREDENTIALS_UNAME, LessonStarted
 from utils import decrypt, load_token
 from app import db, User, app as flask_app
 
@@ -87,6 +87,8 @@ def enroll(enroller, chat_id):
     logger.info(f"{enroller.creds[CREDENTIALS_UNAME]} - Started enrollment for {enroller_summary(enroller)}")
     try:
         enroller.enroll()
+    except LessonStarted as e:
+        response = Response(chat_id, f"Sorry, the lesson {enroller_summary(enroller)} has started and I could not find a place for you.")
     except Exception as e:
         logger.error(e)
         response = Response(chat_id, "An error occured while enrolling.")

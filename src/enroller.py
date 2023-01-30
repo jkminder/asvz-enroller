@@ -77,6 +77,9 @@ NO_SUCH_ELEMENT_ERR_MSG = f"Element on website not found! This may happen when t
 class AsvzBotException(Exception):
     pass
 
+class LessonStarted(Exception):
+    pass
+
 class CredentialsManager:
     def __init__(self, org, uname, password, save_credentials):
         self.credentials = {
@@ -93,11 +96,11 @@ class AsvzEnroller:
     @staticmethod
     def get_driver(chromedriver):
         options = Options()
-        options.add_argument("--private")
+        #options.add_argument("--private")
         options.add_argument("--headless")
-        options.add_argument('--no-sandbox')
-        options.add_argument('--window-size=1920,1080')
-        options.add_argument('--disable-gpu')
+        options.add_argument("--no-sandbox")
+        #options.add_argument('--window-size=1920,1080')
+        #options.add_argument('--disable-gpu')
         options.add_experimental_option("prefs", {"intl.accept_languages": "de"})
         return webdriver.Chrome(
             service=Service(chromedriver),
@@ -280,6 +283,77 @@ class AsvzEnroller:
         finally:
             if driver is not None:
                 driver.quit()
+    @staticmethod
+    def __get_enrollment_and_start_time(driver):
+        try:
+            try:
+                driver.find_element(By.TAG_NAME, "app-page-not-found")
+            except NoSuchElementException:
+                pass
+            else:
+                logging.error("Lesson not found! Please check your lesson details")
+                raise Exception("Lesson not found")
+
+            enrollment_start = AsvzEnroller.__get_enrollment_time(driver)
+            lesson_start = AsvzEnroller.__get_lesson_time(driver)
+        except NoSuchElementException as e:
+            logging.error(NO_SUCH_ELEMENT_ERR_MSG)
+            raise e
+
+        return (enrollment_start, lesson_start)
+
+    @staticmethod
+    def __get_enrollment_time(driver):
+        # requires the user to be logged in, as the intro text is only available then
+        try:
+            introduction_text = driver.find_element(
+                By.XPATH, "//span[contains(., 'Online-Einschreibungen')]"
+            ).get_attribute("innerHTML")
+        except NoSuchElementException as e:
+            logging.info(
+                "No enrollment time found. Assuming enrollment is already open."
+            )
+            # setting enrollment to some date in the past
+            return datetime.today() - timedelta(days=1)
+
+        # assumes enrollment start is the first date
+        enrollment_start_raw = re.findall(
+            "\d{2}\.\d{2}\.\d{4}\s\d{2}:\d{2}", introduction_text
+        )[0]
+
+        # enrollment_start_raw is like '17.01.2023 20:00'
+        enrollment_start_raw = enrollment_start_raw.strip()
+        try:
+            enrollment_start = datetime.strptime(enrollment_start_raw, "%d.%m.%Y %H:%M")
+        except ValueError as e:
+            logging.error(e)
+            raise AsvzBotException(
+                "Failed to parse enrollment start time: '{}'".format(
+                    enrollment_start_raw
+                )
+            )
+        return enrollment_start
+
+    @staticmethod
+    def __get_lesson_time(driver):
+        lesson_interval_raw = driver.find_element(
+            By.XPATH, "//dl[contains(., 'Datum/Zeit')]/dd"
+        )
+        # lesson_interval_raw is like 'Mo, 10.05.2021 06:55 - 08:05'
+        lesson_start_raw = (
+            lesson_interval_raw.get_attribute("innerHTML")
+            .split("-")[0]
+            .split(",")[1]
+            .strip()
+        )
+        try:
+            lesson_start = datetime.strptime(lesson_start_raw, "%d.%m.%Y %H:%M")
+        except ValueError as e:
+            logging.error(e)
+            raise AsvzBotException(
+                "Failed to parse lesson start time: '{}'".format(lesson_start_raw)
+            )
+        return lesson_start
 
     def setup(self, chrome_driver):
         driver = None
@@ -287,49 +361,22 @@ class AsvzEnroller:
             driver = AsvzEnroller.get_driver(chrome_driver)
             driver.get(self.lesson_url)
             driver.implicitly_wait(3)
+            self.__organisation_login(driver)
+            (
+                self.enrollment_start,
+                self.lesson_start,
+            ) = AsvzEnroller.__get_enrollment_and_start_time(driver)
+            self.enrollment_start.replace(tzinfo=pytz.timezone("CET"))
+            self.lesson_start.replace(tzinfo=pytz.timezone("CET"))
 
-            try:
-                driver.find_element(By.TAG_NAME, "app-page-not-found")
-            except NoSuchElementException:
-                pass
-            else:
-                logger.error("Lesson not found! Please check your lesson details")
-                raise Exception("Lesson not found")
-
-            lesson_interval_raw = driver.find_element(
-                By.XPATH, "//dl[contains(., 'Datum/Zeit')]/dd"
-            )
-            # lesson_interval_raw is like 'Mo, 10.05.2021 06:55 - 08:05'
-            lesson_start_raw = (
-                lesson_interval_raw.get_attribute("innerHTML")
-                .split("-")[0]
-                .split(",")[1]
-                .strip()
-            )
-            try:
-                self.lesson_start = datetime.strptime(
-                    lesson_start_raw, "%d.%m.%Y %H:%M"
-                )
-                self.lesson_start.replace(tzinfo=pytz.timezone("CET"))
-                day = timedelta(days = 1)
-                self.enrollment_start = self.lesson_start - day
-            except ValueError as e:
-                logger.error(e)
-                raise AsvzBotException(
-                    "Failed to parse lesson start time: '{}'".format(lesson_start_raw)
-                )
-
-            lesson_title = driver.find_element(By.XPATH, "//h1").text
-
+            self.lesson_title = driver.find_element(By.XPATH, "//h1").text
             lesson_location_raw = driver.find_element(
-                By.XPATH, "//dl[contains(., 'Anlage')]/dd"
+               By.XPATH, "//dl[contains(., 'Anlage')]/dd"
             )
             self.lesson_location = lesson_location_raw.text
-            logger.info("Lesson title: '{}' at '{}'".format(lesson_title, self.lesson_location))
-            self.lesson_title = lesson_title
-
+            logger.info("Lesson title: '{}' at '{}'".format(self.lesson_title, self.lesson_location))
         except NoSuchElementException as e:
-            logger.error(NO_SUCH_ELEMENT_ERR_MSG)
+            logging.error(NO_SUCH_ELEMENT_ERR_MSG)
             raise e
         finally:
             if driver is not None:
@@ -412,14 +459,14 @@ class AsvzEnroller:
             try:
                 driver.find_element(
                     By.XPATH,
-                    "//alert[@class='ng-star-inserted'][contains(., 'ausgebucht')]",
+                    "//div[@class='alert alert-warning'][contains(., 'ausgebucht')]",
                 )
             except NoSuchElementException:
                 # has free places
                 return
 
             if datetime.today() > self.lesson_start:
-                raise AsvzBotException(
+                raise LessonStarted(
                     "Stopping enrollment because lesson has started."
                 )
 
