@@ -21,7 +21,7 @@ from webdriver_manager.core.utils import ChromeType
 from loguru import logger
 from apscheduler.schedulers.background import BackgroundScheduler
 import pytz
-
+import re
 
 """
 This is heavily adapted from "https://github.com/fbuetler/asvz-bot"
@@ -478,7 +478,6 @@ class AsvzEnroller:
             )
             time.sleep(retry_interval_sec)
             driver.refresh()
-
 
 def validate_start_time(start_time):
     try:
