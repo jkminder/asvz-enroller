@@ -25,7 +25,7 @@ if __name__ == '__main__':
     with app.app_context():
         users = db.session.execute(db.select(User)).scalars().all()
         for user in users:
-            if user.verified:
+            if user.verified == 1:
                 print('Sending message to user {}'.format(user.username))
                 response = Response(user.chat_id, args.message)
                 asyncio.run(send_message(response))
