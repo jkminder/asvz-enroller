@@ -36,7 +36,7 @@ jobstores = {
     'default': SQLAlchemyJobStore(url='sqlite:///instance/jobs.db')
 }
 executors = {
-    'default': ProcessPoolExecutor(5)
+    'default': ProcessPoolExecutor(3)
 }
 scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, timezone=pytz.timezone("CET"))
 bot_token = load_token("bot-token.txt")

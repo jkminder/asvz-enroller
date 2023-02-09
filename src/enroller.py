@@ -94,18 +94,16 @@ class CredentialsManager:
 
 class AsvzEnroller:
     @staticmethod
-    def get_driver(chromedriver):
-        options = Options()
-        #options.add_argument("--private")
+    def get_driver():
+        options = webdriver.ChromeOptions()
         options.add_argument("--headless")
         options.add_argument("--no-sandbox")
-        #options.add_argument('--window-size=1920,1080')
-        #options.add_argument('--disable-gpu')
         options.add_experimental_option("prefs", {"intl.accept_languages": "de"})
-        return webdriver.Chrome(
-            service=Service(chromedriver),
-            options=options,
+        driver = webdriver.Remote(
+            command_executor='http://selenium:4444/wd/hub',
+            options=options
         )
+        return driver
 
     @staticmethod
     def wait_until(enrollment_start):
@@ -145,10 +143,10 @@ class AsvzEnroller:
 
 
     @staticmethod
-    def check_login(chrome_driver, credentials):
+    def check_login(credentials):
         logger.info("Checking login credentials")
         try:
-            driver = AsvzEnroller.get_driver(chrome_driver)
+            driver = AsvzEnroller.get_driver()
             driver.get(LESSON_BASE_URL)
             driver.implicitly_wait(3)
             logger.info("Login to '{}'".format(credentials[CREDENTIALS_ORG]))
@@ -220,9 +218,8 @@ class AsvzEnroller:
 
     def enroll(self):
         logger.info("Checking login credentials")
-        chrome_driver = get_chromedriver()
         try:
-            driver = AsvzEnroller.get_driver(chrome_driver)
+            driver = AsvzEnroller.get_driver()
             driver.get(self.lesson_url)
             driver.implicitly_wait(3)
             self.__organisation_login(driver)
@@ -237,7 +234,7 @@ class AsvzEnroller:
             AsvzEnroller.wait_until(self.enrollment_start)
 
         try:
-            driver = AsvzEnroller.get_driver(chrome_driver)
+            driver = AsvzEnroller.get_driver()
             driver.get(self.lesson_url)
             driver.implicitly_wait(3)
 
@@ -355,10 +352,10 @@ class AsvzEnroller:
             )
         return lesson_start
 
-    def setup(self, chrome_driver):
+    def setup(self):
         driver = None
         try:
-            driver = AsvzEnroller.get_driver(chrome_driver)
+            driver = AsvzEnroller.get_driver()
             driver.get(self.lesson_url)
             driver.implicitly_wait(3)
             self.__organisation_login(driver)
@@ -487,137 +484,12 @@ def validate_start_time(start_time):
         raise argparse.ArgumentTypeError(msg)
 
 
-def get_chromedriver():
-    webdriver_manager = None
-    try:
-        webdriver_manager = ChromeDriverManager(chrome_type=ChromeType.CHROMIUM)
-    except:
-        webdriver_manager = None
-
-    if webdriver_manager is None:
-        try:
-            webdriver_manager = ChromeDriverManager(chrome_type=ChromeType.GOOGLE)
-        except:
-            webdriver_manager = None
-
-    if webdriver_manager is None:
-        logger.error("Failed to find chrome/chromium")
-        exit(1)
-
-    return webdriver_manager.install()
-
 def verify_login(username, password, organisation):
-    chrome_driver = get_chromedriver()
     creds = CredentialsManager(organisation, username, password, False)
-    return AsvzEnroller.check_login(chrome_driver, creds.get())
+    return AsvzEnroller.check_login(creds.get())
 
 def get_enroller(lesson_url, username, password, organisation):
-    chrome_driver = get_chromedriver()
     creds = CredentialsManager(organisation, username, password, False)
     enroller = AsvzEnroller(lesson_url, creds.get())
-    enroller.setup(chrome_driver)
+    enroller.setup()
     return enroller
-
-
-def main():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument(
-        "-org",
-        "--organisation",
-        choices=list(ORGANISATIONS.keys()),
-        help="Name of your organisation.",
-    )
-    parser.add_argument("-u", "--username", type=str, help="Organisation username")
-    parser.add_argument("-p", "--password", type=str, help="Organisation password")
-    parser.add_argument(
-        "--save-credentials",
-        default=False,
-        action="store_true",
-        help="Store your login credentials locally and reused them on the next run",
-    )
-
-    subparsers = parser.add_subparsers(dest="type")
-    parser_lesson = subparsers.add_parser("lesson", help="For lessons visited once")
-    parser_lesson.add_argument(
-        "lesson_id",
-        type=int,
-        help="ID of a particular lesson e.g. 200949 in https://schalter.asvz.ch/tn/lessons/200949",
-    )
-
-    parser_training = subparsers.add_parser(
-        "training", help="For lessons visited periodically"
-    )
-    parser_training.add_argument(
-        "-w",
-        "--weekday",
-        required=True,
-        choices=list(WEEKDAYS.keys()),
-        help="Day of the week of the lesson",
-    )
-    parser_training.add_argument(
-        "-s",
-        "--start-time",
-        required=True,
-        type=validate_start_time,
-        help="Time when the lesson starts e.g. '19:15'",
-    )
-    parser_training.add_argument(
-        "-t", "--trainer", required=True, type=str, help="Trainer giving this lesson"
-    )
-    parser_training.add_argument(
-        "-f",
-        "--facility",
-        required=True,
-        choices=list(FACILITIES.keys()),
-        help="Facility where the lesson takes place e.g. 'Sport Center Polyterrasse'",
-    )
-    parser_training.add_argument(
-        "-l",
-        "--level",
-        required=False,
-        choices=list(LEVELS.keys()),
-        help="Level of the lesson e.g. 'Alle'",
-    )
-    parser_training.add_argument(
-        "sport_id",
-        type=int,
-        help="Number at the end of link to a particular sport on ASVZ Sportfahrplan, e.g. 45743 in https://asvz.ch/426-sportfahrplan?f[0]=sport:45743 for volleyball",
-    )
-
-    args = parser.parse_args()
-
-    creds = None
-    try:
-        creds = CredentialsManager(
-            args.organisation, args.username, args.password, args.save_credentials
-        ).get()
-    except AsvzBotException as e:
-        logger.error(e)
-        exit(1)
-
-    chromedriver = get_chromedriver()
-
-    enroller = None
-    if args.type == "lesson":
-        lesson_url = "{}/tn/lessons/{}".format(LESSON_BASE_URL, args.lesson_id)
-        enroller = AsvzEnroller(chromedriver, lesson_url, creds)
-    elif args.type == "training":
-        enroller = AsvzEnroller.from_lesson_attributes(
-            chromedriver,
-            args.weekday,
-            args.start_time,
-            args.trainer,
-            args.facility,
-            args.level,
-            args.sport_id,
-            creds,
-        )
-    else:
-        raise AsvzBotException("Unknown enrollment type: '{}".format(args.type))
-
-    enroller.enroll()
-
-
-if __name__ == "__main__":
-    main()

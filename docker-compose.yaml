@@ -1,9 +1,20 @@
 version: "3.2"
 services:
-  web:
+  selenium:
+    image: selenium/standalone-chrome
+    container_name: selenium
+    shm_size: 2gb
+    privileged: true
+    restart: always
+    volumes:
+        - type: bind
+          source: ./logs/
+          target: /logs/
+    environment:
+        - TZ=Europe/Zurich
+  bot:
     image: asvz-enroller
     build: .
-    shm_size: 2gb
     container_name: asvz-enroller
     restart: always
     ports:
@@ -15,3 +26,5 @@ services:
         - type: bind
           source: ./logs/
           target: /logs/
+    depends_on:
+        - selenium
