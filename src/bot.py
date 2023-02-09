@@ -15,7 +15,7 @@ import re
 from datetime import datetime
 import pytz
 
-from enroller import verify_login, LESSON_BASE_URL, get_enroller, CREDENTIALS_UNAME, LessonStarted
+from enroller import verify_login, LESSON_BASE_URL, get_enroller, CREDENTIALS_UNAME, LessonStarted, LoginFailed
 from utils import decrypt, load_token
 from app import db, User, app as flask_app
 
@@ -89,6 +89,10 @@ def enroll(enroller, chat_id):
         enroller.enroll()
     except LessonStarted as e:
         response = Response(chat_id, f"Sorry, the lesson {enroller_summary(enroller)} has started and I could not find a place for you.")
+    except LoginFailed as e:
+        response = Response(chat_id, f"Sorry, your login credentials are invalid. You are no longer authorized to use this bot. Please register again on asvz.jkminder.ch.")
+        user = get_user_from_chat_id(chat_id)
+        reset_token(user)
     except Exception as e:
         logger.error(e)
         response = Response(chat_id, "An error occured while enrolling.")

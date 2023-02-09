@@ -80,6 +80,10 @@ class AsvzBotException(Exception):
 class LessonStarted(Exception):
     pass
 
+class LoginFailed(Exception):
+    pass
+
+
 class CredentialsManager:
     def __init__(self, org, uname, password, save_credentials):
         self.credentials = {
@@ -379,7 +383,7 @@ class AsvzEnroller:
             if driver is not None:
                 driver.quit()
 
-    def __organisation_login(self, driver):
+    def __organisation_login(self, driver, retry=True):
         logger.debug("Start login process")
         WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable(
@@ -446,7 +450,11 @@ class AsvzEnroller:
                     driver.current_url
                 )
             )
-            return False
+            if retry:
+                logger.warning("Sleeping for 5 seconds and retrying...")
+                self.__organisation_login(driver, retry=False)
+                return True
+            raise LoginFailed("Login failed")
         else:
             logger.info("Valid login credentials")
             return True

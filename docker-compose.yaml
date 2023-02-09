@@ -12,6 +12,7 @@ services:
           target: /logs/
     environment:
         - TZ=Europe/Zurich
+        - SE_NODE_MAX_SESSIONS=4
   bot:
     image: asvz-enroller
     build: .
