@@ -1,12 +1,19 @@
 #!/usr/bin/env python
-"""Create a new admin user able to view the /reports endpoint."""
 from getpass import getpass
 import sys
 import secrets
 from passlib.hash import sha256_crypt
+from flask_sqlalchemy import SQLAlchemy 
 from flask import current_app, Flask
-from src.app import db, User
-from src.app import app as flask_app
+from app import db, User
+
+flask_app = Flask(__name__)
+flask_app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///../../instance/asvz.db"
+# create the extension
+flask_app = SQLAlchemy()
+# create the extension
+db = SQLAlchemy()
+db.init_app(flask_app)
 
 # initialize the app with the extension
 def main():
