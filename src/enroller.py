@@ -136,15 +136,6 @@ class AsvzEnroller:
         self.lesson_url = lesson_url
         self.creds = creds
 
-        logger.info(
-            "Summary:\n\tOrganisation: {}\n\tUsername: {}\n\tPassword: {}\n\tLesson: {}".format(
-                self.creds[CREDENTIALS_ORG],
-                self.creds[CREDENTIALS_UNAME],
-                "*" * len(self.creds[CREDENTIALS_PW]),
-                self.lesson_url,
-            )
-        )
-
 
     @staticmethod
     def check_login(credentials):

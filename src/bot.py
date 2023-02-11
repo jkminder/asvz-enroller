@@ -43,6 +43,34 @@ bot_token = load_token("bot-token.txt")
 app_secret = load_token("secret.txt")
 #################
 
+#### MESSAGES ####
+# registration
+WELCOME = f"Welcome {0}! You are now authorized. Verifying your login credentials..."
+VALID_CREDENTIALS = "Your login credentials have been verified. Your account is now linked to this telegram account. Send /help for more information on how to use me."
+INVALID_CREDENTIALS = "Your login credentials are not valid and your authorization has been retracted. Please visit https://asvz.jkminder.ch to change them and reauthorize."
+CREDENTIAL_NO_LONGER_VALID = "Sorry, your login credentials are invalid. You are no longer authorized to use this bot. Please register again on asvz.jkminder.ch."
+NOT_YET_VALIDATED = "Your login credentials are not yet verified. This might take some minutes. Resubmit the job in a few minutes. You will be notified when you're credentials have been verified."
+
+# enrolment
+JOB_SUBMITTED = "Job {0} has been submitted."
+NO_URL_FOUND = f"Could not find a lesson url in your message. It should look like {LESSON_BASE_URL}/tn/lessons/ followed by some number."
+LESSON_STARTED = "Sorry, the lesson {0} has started and I could not find a place for you."
+ERROR_ENROLLING = "An error occured while enrolling you for the lesson. Please try again later."
+ENROLL_SUCCESS = "You have been successfully enrolled for {0}!"
+NO_JOBS = "You have no open enrolment jobs."
+
+# delete
+DELETE_NO_NUMBER = "Please provide a job number."
+DELETE_NUMBER_NOTFOUND = "Job number not found. Try again."
+DELETE_VALIDATE = "Are you sure you want to delete job '{0}'?"
+DELETE_CONFIRMATION = "Job has been deleted."
+
+# help
+HELP = """Send me a link to an ASVZ lesson and I will enroll you. You can directly share a lesson with me from the ASVZ app. Send /jobs to see a list of open enrolment jobs. With /delete {jobnumber} you can remove specific jobs. The jobnumber can be found with /jobs."""
+
+# other
+UNKNOWN_COMMAND = "Sorry, I didn't understand that command."
+
 #### HELPERS ####
 
 def get_user_from_token(token):
@@ -88,16 +116,16 @@ def enroll(enroller, chat_id):
     try:
         enroller.enroll()
     except LessonStarted as e:
-        response = Response(chat_id, f"Sorry, the lesson {enroller_summary(enroller)} has started and I could not find a place for you.")
+        response = Response(chat_id, LESSON_STARTED.format(enroller_summary(enroller)))
     except LoginFailed as e:
-        response = Response(chat_id, f"Sorry, your login credentials are invalid. You are no longer authorized to use this bot. Please register again on asvz.jkminder.ch.")
+        response = Response(chat_id, CREDENTIAL_NO_LONGER_VALID)
         user = get_user_from_chat_id(chat_id)
         reset_token(user)
     except Exception as e:
         logger.error(e)
-        response = Response(chat_id, "An error occured while enrolling.")
+        response = Response(chat_id, ERROR_ENROLLING)
     else:
-        response = Response(chat_id, f"You have been successfully enrolled for {enroller_summary(enroller)}!")
+        response = Response(chat_id, ENROLL_SUCCESS.format(enroller_summary(enroller)))
     asyncio.run(send_message(response))
 
 def initialise_job(lesson_url, user, password, organisation, chat_id):
@@ -108,7 +136,7 @@ def initialise_job(lesson_url, user, password, organisation, chat_id):
         scheduler.add_job(enroll, args=(enroller, chat_id))
     else:
         scheduler.add_job(enroll, args=(enroller, chat_id), trigger='date', run_date=enroller.enrollment_start)
-        
+    return enroller_summary(enroller)
 
 def user_authorized(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -135,7 +163,6 @@ def get_jobs(chat_id):
 #################
 
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type == ChatType.PRIVATE:
         if user_authorized(update, context):
@@ -145,14 +172,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @authorized
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_msg = """Send me a link to an ASVZ lesson and I will enroll you. You can directly share a lesson with me from the ASVZ app. Send /jobs to see a list of open enrolment jobs. With /delete {jobnumber} you can remove specific jobs. The jobnumber can be found with /jobs."""
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=help_msg)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=HELP)
 
 @authorized
 async def jobs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     jobs = get_jobs(update.effective_chat.id)
     if len(jobs) == 0:
-        msg = "No jobs found."
+        msg = NO_JOBS
     else:
         msg = "Jobs:\n"
         for i, job in enumerate(jobs):
@@ -165,20 +191,20 @@ async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         job_id = int(update.message.text.split(" ")[1])
     except:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Please specify a job number.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=DELETE_NO_NUMBER)
         return ConversationHandler.END
     jobs = scheduler.get_jobs()
     if len(jobs) == 0:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="No jobs found.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=NO_JOBS)
         return ConversationHandler.END
     elif job_id > len(jobs):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Job number not found. Try again.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=DELETE_NUMBER_NOTFOUND)
         return ConversationHandler.END
     else:
         job = jobs[job_id-1]
         context.user_data["job"] = job.id
         reply_keyboard = [["Yes", "No"]]
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Are you sure you want to delete job '{job_summary(job)}'?", reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, input_field_placeholder="Yes or No?"))
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=DELETE_VALIDATE.format(job_summary(job)), reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, input_field_placeholder="Yes or No?"))
         return CONFIRM
 
 @authorized
@@ -186,7 +212,7 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text == "Yes":
         job_id = context.user_data["job"]
         scheduler.remove_job(job_id)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Job deleted.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=DELETE_CONFIRMATION)
     return ConversationHandler.END
 
 @authorized
@@ -195,7 +221,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @authorized
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Sorry, I didn't understand that command.")
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=UNKNOWN_COMMAND)
 
 async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -204,32 +230,30 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if db_user is None:
         db_user = get_user_from_token(update.message.text)
         if db_user and not db_user.linked:
-                text = f"Welcome {db_user.username}! You are now authorized. Verifying your login credentials..."
                 logger.info(f"User {db_user.username} authorized.")
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=WELCOME.format(db_user.username))
                 verified = verify_login(db_user.asvz_username, decrypt(db_user.asvz_password, app_secret), db_user.asvz_organisation)
                 if verified == 0:
                     reset_token(db_user)
-                    await context.bot.send_message(chat_id=update.effective_chat.id, text="Your login credentials are not valid and your authorization has been retracted. Please visit https://asvz.jkminder.ch to change them and reauthorize.")
+                    await context.bot.send_message(chat_id=update.effective_chat.id, text=INVALID_CREDENTIALS)
                 elif verified == 1:
                     set_user_data(db_user, user, chat)
                     # update user
-                    await context.bot.send_message(chat_id=update.effective_chat.id, text="Your login credentials have been verified. Your account is now linked to this telegram account. Send /help for more information on how to use me.")
+                    await context.bot.send_message(chat_id=update.effective_chat.id, text=VALID_CREDENTIALS)
         return
     else:
         logger.info(f"{update.effective_user.username} - Job received: {update.message.text}")
         if db_user.verified == -1:
-            logger.info(f"{update.effective_user.username} – Job invalid.")
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="Your login credentials are not yet verified. This might take some minutes. Resubmit the job in a few minutes. You will be notified when you're credentials have been verified.")    
+            logger.info(f"{update.effective_user.username} - Job invalid.")
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=NOT_YET_VALIDATED)    
         elif LESSON_BASE_URL+"/tn/lessons/" in update.message.text:
             # get full url from message with regex(starts with LESSON_BASE_URL) 
             url = re.search(f"https:\/\/schalter\.asvz\.ch\/tn\/lessons/\d*", update.message.text).group(0)
-            print(url)
             if url:
-                initialise_job(url, db_user.asvz_username, db_user.asvz_password, db_user.asvz_organisation, chat.id)
-                await context.bot.send_message(chat_id=update.effective_chat.id, text="Job submitted.")
+                job_summary = initialise_job(url, db_user.asvz_username, db_user.asvz_password, db_user.asvz_organisation, chat.id)
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=JOB_SUBMITTED.format(job_summary))
         else:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Could not find a lesson url in your message. It should look like {LESSON_BASE_URL}/tn/lessons/ followed by some number.")
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=NO_URL_FOUND)
    
 
 # Message Dispatcher
