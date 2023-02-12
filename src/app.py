@@ -1,14 +1,12 @@
 from flask import Flask, request, render_template, redirect, session
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from passlib.hash import sha256_crypt
 from wtforms import Form, StringField, validators, PasswordField, SelectField
 import secrets
-from loguru import logger
-from flask_sqlalchemy import SQLAlchemy
 import yaml
 
 from database import User, db
-from utils import load_token, encrypt
+from utils import encrypt
 from enroller import ORGANISATIONS
 
 
