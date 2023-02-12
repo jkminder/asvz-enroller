@@ -14,6 +14,7 @@ from apscheduler.executors.pool import ProcessPoolExecutor
 import re
 from datetime import datetime
 import pytz
+import yaml
 
 from enroller import verify_login, LESSON_BASE_URL, get_enroller, CREDENTIALS_UNAME, LessonStarted, LoginFailed
 from utils import decrypt, load_token
@@ -22,14 +23,14 @@ from app import db, User, app as flask_app
 
 #### CONFIG ####
 
-# ConversationHandler states
-DELETE, CONFIRM = range(2)
 
 # logging
 logger.add("logs/bot.log", rotation="500 MB")
 ################
 
 #### GLOBALS ####
+# ConversationHandler states
+DELETE, CONFIRM = range(2)
 response_queue = Queue()
 
 jobstores = {
@@ -39,20 +40,23 @@ executors = {
     'default': ProcessPoolExecutor(3)
 }
 scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, timezone=pytz.timezone("CET"))
-bot_token = load_token("bot-token.txt")
-app_secret = load_token("secret.txt")
+
+# load config
+config = None
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
 #################
 
 #### MESSAGES ####
 # registration
-WELCOME = f"Welcome {0}! You are now authorized. Verifying your login credentials..."
+WELCOME = "Welcome {0}! You are now authorized. Verifying your login credentials..."
 VALID_CREDENTIALS = "Your login credentials have been verified. Your account is now linked to this telegram account. Send /help for more information on how to use me."
-INVALID_CREDENTIALS = "Your login credentials are not valid and your authorization has been retracted. Please visit https://asvz.jkminder.ch to change them and reauthorize."
-CREDENTIAL_NO_LONGER_VALID = "Sorry, your login credentials are invalid. You are no longer authorized to use this bot. Please register again on asvz.jkminder.ch."
+INVALID_CREDENTIALS = f"Your login credentials are not valid and your authorization has been retracted. Please visit {config['app']['url']} to change them and reauthorize."
+CREDENTIAL_NO_LONGER_VALID = f"Sorry, your login credentials are invalid. You are no longer authorized to use this bot. Please register again on {config['app']['url']}."
 NOT_YET_VALIDATED = "Your login credentials are not yet verified. This might take some minutes. Resubmit the job in a few minutes. You will be notified when you're credentials have been verified."
 
 # enrolment
-JOB_SUBMITTED = "Job {0} has been submitted."
+JOB_SUBMITTED = "Job '{0}' has been submitted."
 NO_URL_FOUND = f"Could not find a lesson url in your message. It should look like {LESSON_BASE_URL}/tn/lessons/ followed by some number."
 LESSON_STARTED = "Sorry, the lesson {0} has started and I could not find a place for you."
 ERROR_ENROLLING = "An error occured while enrolling you for the lesson. Please try again later."
@@ -129,7 +133,7 @@ def enroll(enroller, chat_id):
     asyncio.run(send_message(response))
 
 def initialise_job(lesson_url, user, password, organisation, chat_id):
-    enroller = get_enroller(lesson_url, user, decrypt(password, app_secret), organisation)
+    enroller = get_enroller(lesson_url, user, decrypt(password, config["app"]["secret"]), organisation)
     logger.info(f"{user} - Job: {enroller_summary(enroller)} - Exec: {enroller.enrollment_start} ")
     if enroller.enrollment_start < datetime.today():
         logger.info(f"{user} - Enrollment already started.")
@@ -232,7 +236,7 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if db_user and not db_user.linked:
                 logger.info(f"User {db_user.username} authorized.")
                 await context.bot.send_message(chat_id=update.effective_chat.id, text=WELCOME.format(db_user.username))
-                verified = verify_login(db_user.asvz_username, decrypt(db_user.asvz_password, app_secret), db_user.asvz_organisation)
+                verified = verify_login(db_user.asvz_username, decrypt(db_user.asvz_password, config["app"]["secret"]), db_user.asvz_organisation)
                 if verified == 0:
                     reset_token(db_user)
                     await context.bot.send_message(chat_id=update.effective_chat.id, text=INVALID_CREDENTIALS)
@@ -258,7 +262,7 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Message Dispatcher
 async def send_message(response):
-    bot = Bot(token=bot_token)
+    bot = Bot(token=config["bot"]["token"])
     await bot.send_message(chat_id=response.chat_id, text=response.message)
 
 class Response:
@@ -280,7 +284,7 @@ def message_dispatcher():
 
 if __name__ == '__main__':
     scheduler.start()
-    application = ApplicationBuilder().token(bot_token).build()
+    application = ApplicationBuilder().token(config["bot"]["token"]).build()
 
     # Message dispatcher
     Thread(target=message_dispatcher).start()

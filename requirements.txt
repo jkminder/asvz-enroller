@@ -9,3 +9,4 @@ passlib
 wtforms
 webdriver-manager
 cryptography
+pyyaml

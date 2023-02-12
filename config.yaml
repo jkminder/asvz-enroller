@@ -1,0 +1,6 @@
+bot:
+  token: # Telegram API Bot Token
+  link: # Telegram Bot Link, e.g. https://t.me/NAMEOFBOT. Will be linked to on the website.
+app:
+  secret: # Secret for the session cookie. Generate with e.g. `openssl rand -base64 32`
+  url: # URL of webpage. This will only be used for bot messages (e.g. "Visit URL to update your credentials.")
