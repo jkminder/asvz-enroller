@@ -5,14 +5,26 @@ from wtforms import Form, StringField, validators, PasswordField, SelectField
 import secrets
 from loguru import logger
 from flask_sqlalchemy import SQLAlchemy
+import yaml
 
-# Hack to fix dependency issues for create_user
-# TODO: Make this better!
-if __name__ == "__main__":
-    from utils import load_token, encrypt
-    from enroller import ORGANISATIONS
-else:
-    ORGANISATIONS = {}
+from database import User, db
+from utils import load_token, encrypt
+from enroller import ORGANISATIONS
+
+
+app = Flask(__name__)
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///asvz.db"
+
+# initialize the app with the extension
+login_manager = LoginManager()
+login_manager.init_app(app)
+db.init_app(app)
+
+# load config
+config = None
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+    
 
 class LoginForm(Form):
     username = StringField('Username', [validators.DataRequired()])
@@ -27,61 +39,9 @@ class AccessToken(Form):
     access_token = StringField('Access Token', render_kw={'readonly': True})
     telegram_account = StringField('Linked Telegram Account', render_kw={'readonly': True})
 
-app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///asvz.db"
-# initialize the app with the extension
-
-login_manager = LoginManager()
-login_manager.init_app(app)
-
-# create the extension
-db = SQLAlchemy()
-db.init_app(app)
-
-class User(db.Model):
-    """An admin user capable of viewing reports.
-
-    :param str username: email address of user
-    :param str password: encrypted password for the user
-    :param bool authenticated: whether the user has been authenticated
-    """
-    __tablename__ = 'user'
-
-    username = db.Column(db.String, primary_key=True)
-    password = db.Column(db.String)
-    asvz_username = db.Column(db.String)
-    asvz_password = db.Column(db.String)
-    asvz_organisation = db.Column(db.String)
-    authenticated = db.Column(db.Boolean, default=False)
-    linked = db.Column(db.Boolean, default=False)
-    verified = db.Column(db.Integer, default=-1)
-    chat_id = db.Column(db.Integer, default=0)
-    access_token = db.Column(db.String, default="")
-    telegram_username = db.Column(db.String, default="")
-
-    def is_active(self):
-        """True, as all users are active."""
-        return True
-
-    def get_id(self):
-        """Return the email address to satisfy Flask-Login's requirements."""
-        return self.username
-
-    def is_authenticated(self):
-        """Return True if the user is authenticated."""
-        return self.authenticated
-
-    def is_anonymous(self):
-        """False, as anonymous users aren't supported."""
-        return False
-
-
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.execute(db.select(User).where(User.username == user_id)).scalar()
-
-
-# define a list of users and their corresponding passwords
 
 @app.route('/')
 def index():
@@ -112,7 +72,7 @@ def credentials():
     if form.validate():
         user = current_user
         user.asvz_username = request.form['username']
-        user.asvz_password = encrypt(request.form['password'], app_secret)
+        user.asvz_password = encrypt(request.form['password'], config["app"]["secret"])
         user.asvz_organisation = request.form['organisation']
         user.access_token = secrets.token_urlsafe(16)
         user.telegram_username = ""
@@ -122,7 +82,7 @@ def credentials():
         db.session.commit()
         return redirect('/welcome')
     else:
-        return render_template('welcome.html', user=current_user, form=form, token=AccessToken(data={'access_token': current_user.access_token}))
+        return render_template('welcome.html', user=current_user, form=form, token=AccessToken(data={'access_token': current_user.access_token}), bot_link=config["bot"]["link"])
 
 @app.route('/welcome')
 @login_required
@@ -138,7 +98,5 @@ def logout():
     return redirect('/')
 
 if __name__ == '__main__':
-    global app_secret
-    app_secret = load_token('secret.txt')
-    app.secret_key = app_secret
-    app.run(debug=True, host= '0.0.0.0')    
+    app.secret_key = config["app"]["secret"]
+    app.run(host="0.0.0.0")    
