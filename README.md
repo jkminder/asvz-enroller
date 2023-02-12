@@ -6,6 +6,7 @@ The application automatically schedules enrolment jobs (done with selenium) and 
 
 The application consists of two main parts. First, each user goes to a web interface that allows them to save their ASVZ credentials and link their Telegram account. Once this is done, interaction is only via Telegram. The web interface guides the user through all the details. 
 
+Note: The enroller (primarily the selenium code) is based on https://github.com/fbuetler/asvz-bot
 # Installation
 
 To run this application you need to have [Docker](https://www.docker.com) installed. Further you need to have a [telegram bot API key](https://core.telegram.org/bots). 
