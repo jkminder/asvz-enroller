@@ -88,7 +88,7 @@ def welcome():
     # get newest information from database
     user = db.session.execute(db.select(User).where(User.username == current_user.username)).scalar()
     form_data = {'username': user.asvz_username, 'organisation': user.asvz_organisation, 'password': 'placeholder' if user.asvz_password else None}
-    return render_template('welcome.html', user=current_user, form=ASVZCredentialsForm(data=form_data), token=AccessToken(data={'access_token': user.access_token, 'telegram_account': "Not yet linked!" if not user.telegram_username else user.telegram_username}))
+    return render_template('welcome.html', user=current_user, form=ASVZCredentialsForm(data=form_data), token=AccessToken(data={'access_token': user.access_token, 'telegram_account': "Not yet linked!" if not user.telegram_username else user.telegram_username}),  bot_link=config["bot"]["link"])
 
 @app.route('/logout')
 def logout():
