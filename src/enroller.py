@@ -80,12 +80,17 @@ class AsvzBotException(Exception):
 class LessonStarted(Exception):
     pass
 
+class LessonFull(Exception):
+    pass
+
 class LoginFailed(Exception):
     pass
 
+class AlreadyEnrolled(Exception):
+    pass
 
 class CredentialsManager:
-    def __init__(self, org, uname, password, save_credentials):
+    def __init__(self, org, uname, password):
         self.credentials = {
                 CREDENTIALS_ORG: ORGANISATIONS[org],
                 CREDENTIALS_UNAME: uname,
@@ -132,10 +137,10 @@ class AsvzEnroller:
             )
             time.sleep(sleep_time)
 
-    def __init__(self, lesson_url, creds):
+    def __init__(self, lesson_url, creds, id):
         self.lesson_url = lesson_url
         self.creds = creds
-
+        self.id = id
 
     @staticmethod
     def check_login(credentials):
@@ -212,19 +217,6 @@ class AsvzEnroller:
                 driver.quit()
 
     def enroll(self):
-        logger.info("Checking login credentials")
-        try:
-            driver = AsvzEnroller.get_driver()
-            driver.get(self.lesson_url)
-            driver.implicitly_wait(3)
-            self.__organisation_login(driver)
-        except NoSuchElementException as e:
-            logger.error(NO_SUCH_ELEMENT_ERR_MSG)
-            raise e
-        finally:
-            if driver is not None:
-                driver.quit()
-
         if datetime.today() < self.enrollment_start:
             AsvzEnroller.wait_until(self.enrollment_start)
 
@@ -233,40 +225,41 @@ class AsvzEnroller:
             driver.get(self.lesson_url)
             driver.implicitly_wait(3)
 
-            logger.info("Starting enrollment")
+            while True:
+                logger.info("Starting enrollment")
 
-            enrolled = False
-            while not enrolled:
-                if self.enrollment_start < datetime.today():
-                    logger.info(
-                        "Enrollment is already open. Checking for available places."
-                    )
-                    self.__wait_for_free_places(driver)
+                self.__check_for_free_places(driver)
 
-                logger.info("Lesson has free places")
+                logger.info("Lesson has free places.")
 
                 self.__organisation_login(driver)
-
+                    
                 try:
                     logger.info("Waiting for enrollment")
-                    WebDriverWait(driver, 5 * 60).until(
+                    button = WebDriverWait(driver, 60).until(
                         EC.element_to_be_clickable(
                             (
                                 By.XPATH,
-                                "//button[@id='btnRegister' and @class='btn-primary btn enrollmentPlacePadding']",
+                                "//button[@id='btnRegister']",
                             )
                         )
-                    ).click()
+                    )
+                    if "ENTFERNEN" in button.text:
+                        logger.info("Already enrolled.")
+                        raise AlreadyEnrolled
+                    button.click()
                     time.sleep(5)
                 except TimeoutException as e:
                     logger.info(
                         "Place was already taken in the meantime. Rechecking for available places."
                     )
                     continue
+                except AlreadyEnrolled as e:
+                    raise e
                 except Exception as e:
                     logger.error(e)
                     raise e
-                logger.info("Successfully enrolled. Train hard and have fun!")
+                logger.info("Successfully enrolled.")
                 return True
 
         except NoSuchElementException as e:
@@ -275,6 +268,7 @@ class AsvzEnroller:
         finally:
             if driver is not None:
                 driver.quit()
+
     @staticmethod
     def __get_enrollment_and_start_time(driver):
         try:
@@ -376,6 +370,15 @@ class AsvzEnroller:
 
     def __organisation_login(self, driver, retry=True):
         logger.debug("Start login process")
+        try:
+            logger.debug("Check if already logged in")
+            driver.find_element(By.XPATH, "//button[@class='btn btn-default' and @title='Login']")
+        except NoSuchElementException:
+            logger.info("Already logged in")
+            return
+        except Exception as e:
+            logger.error(e)
+            raise e
         WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable(
                 (
@@ -450,45 +453,31 @@ class AsvzEnroller:
             logger.info("Valid login credentials")
             return True
 
-    def __wait_for_free_places(self, driver):
-        while True:
-            try:
-                driver.find_element(
-                    By.XPATH,
-                    "//div[@class='alert alert-warning'][contains(., 'ausgebucht')]",
-                )
-            except NoSuchElementException:
-                # has free places
-                return
-
-            if datetime.today() > self.lesson_start:
-                raise LessonStarted(
-                    "Stopping enrollment because lesson has started."
-                )
-
-            retry_interval_sec = 1 * 30
-            logger.info(
-                "Lesson is booked out. Rechecking in {} secs..".format(
-                    retry_interval_sec
-                )
+    def __check_for_free_places(self, driver):
+        try:
+            driver.find_element(
+                By.XPATH,
+                "//div[@class='alert alert-warning'][contains(., 'ausgebucht')]",
             )
-            time.sleep(retry_interval_sec)
-            driver.refresh()
+        except NoSuchElementException:
+            # has free places
+            return
 
-def validate_start_time(start_time):
-    try:
-        return datetime.strptime(start_time, TIMEFORMAT)
-    except ValueError:
-        msg = "Invalid start time specified. Supported format is {}".format(TIMEFORMAT)
-        raise argparse.ArgumentTypeError(msg)
+        if datetime.today() > self.lesson_start:
+            raise LessonStarted(
+                "Stopping enrollment because lesson has started."
+            )
 
+        logger.info("Lesson is full.")
+        raise LessonFull()
 
 def verify_login(username, password, organisation):
-    creds = CredentialsManager(organisation, username, password, False)
+    creds = CredentialsManager(organisation, username, password)
     return AsvzEnroller.check_login(creds.get())
 
 def get_enroller(lesson_url, username, password, organisation):
-    creds = CredentialsManager(organisation, username, password, False)
-    enroller = AsvzEnroller(lesson_url, creds.get())
+    creds = CredentialsManager(organisation, username, password)
+    id = f"{username}_{organisation}_{lesson_url}"
+    enroller = AsvzEnroller(lesson_url, creds.get(), id)
     enroller.setup()
     return enroller

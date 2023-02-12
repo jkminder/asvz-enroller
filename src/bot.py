@@ -3,21 +3,16 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, TypeHandler, ConversationHandler
 from telegram.ext.filters import ChatType 
 from telegram import Bot
-from threading import Thread
-from queue import Queue
-import time
 import asyncio
-import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.executors.pool import ProcessPoolExecutor
 import re
-from datetime import datetime
 import pytz
 import yaml
 
-from enroller import verify_login, LESSON_BASE_URL, get_enroller, CREDENTIALS_UNAME, LessonStarted, LoginFailed
-from utils import decrypt, load_token
+from enroller import verify_login, LESSON_BASE_URL, get_enroller, CREDENTIALS_UNAME, LessonStarted, LoginFailed, LessonFull, AlreadyEnrolled
+from utils import decrypt
 from app import db, User, app as flask_app
 
 
@@ -31,7 +26,8 @@ logger.add("logs/bot.log", rotation="500 MB")
 #### GLOBALS ####
 # ConversationHandler states
 DELETE, CONFIRM = range(2)
-response_queue = Queue()
+
+LESSON_CHECK_INTERVAL = 30
 
 jobstores = {
     'default': SQLAlchemyJobStore(url='sqlite:///instance/jobs.db')
@@ -55,13 +51,15 @@ INVALID_CREDENTIALS = f"Your login credentials are not valid and your authorizat
 CREDENTIAL_NO_LONGER_VALID = f"Sorry, your login credentials are invalid. You are no longer authorized to use this bot. Please register again on {config['app']['url']}."
 NOT_YET_VALIDATED = "Your login credentials are not yet verified. This might take some minutes. Resubmit the job in a few minutes. You will be notified when you're credentials have been verified."
 
-# enrolment
+# enrollment
 JOB_SUBMITTED = "Job '{0}' has been submitted."
 NO_URL_FOUND = f"Could not find a lesson url in your message. It should look like {LESSON_BASE_URL}/tn/lessons/ followed by some number."
-LESSON_STARTED = "Sorry, the lesson {0} has started and I could not find a place for you."
+LESSON_STARTED = "Sorry, the lesson {0} has started and I did not manage to find a place for you."
+LESSON_FULL = "Sorry the lesson '{0}' is already full. I will notify you when a place becomes available."
 ERROR_ENROLLING = "An error occured while enrolling you for the lesson. Please try again later."
-ENROLL_SUCCESS = "You have been successfully enrolled for {0}!"
-NO_JOBS = "You have no open enrolment jobs."
+ENROLL_SUCCESS = "You have been successfully enrolled for '{0}'!"
+NO_JOBS = "You have no open enrollment jobs."
+ALREADY_ENROLLED = "You are already enrolled for the lesson '{0}'."
 
 # delete
 DELETE_NO_NUMBER = "Please provide a job number."
@@ -115,31 +113,41 @@ def enroller_summary(enroller):
 def job_summary(job):
     return enroller_summary(job.args[0])
 
-def enroll(enroller, chat_id):
+def enroll(enroller, chat_id, notify_full=True):
     logger.info(f"{enroller.creds[CREDENTIALS_UNAME]} - Started enrollment for {enroller_summary(enroller)}")
+    response = None
     try:
         enroller.enroll()
     except LessonStarted as e:
         response = Response(chat_id, LESSON_STARTED.format(enroller_summary(enroller)))
+        scheduler.remove_job(enroller.id)
+    except LessonFull as e:
+        if notify_full:
+            response = Response(chat_id, LESSON_FULL.format(enroller_summary(enroller)))
+            scheduler.modify_job(enroller.id, args=(enroller, chat_id, False))
     except LoginFailed as e:
         response = Response(chat_id, CREDENTIAL_NO_LONGER_VALID)
         user = get_user_from_chat_id(chat_id)
         reset_token(user)
+        scheduler.remove_job(enroller.id)    
+    except AlreadyEnrolled as e:
+        response = Response(chat_id, ALREADY_ENROLLED.format(enroller_summary(enroller)))
+        scheduler.remove_job(enroller.id)
     except Exception as e:
         logger.error(e)
         response = Response(chat_id, ERROR_ENROLLING)
+        scheduler.remove_job(enroller.id)
     else:
         response = Response(chat_id, ENROLL_SUCCESS.format(enroller_summary(enroller)))
-    asyncio.run(send_message(response))
+        scheduler.remove_job(enroller.id)
+
+    if response is not None:
+        asyncio.run(send_message(response))
 
 def initialise_job(lesson_url, user, password, organisation, chat_id):
     enroller = get_enroller(lesson_url, user, decrypt(password, config["app"]["secret"]), organisation)
     logger.info(f"{user} - Job: {enroller_summary(enroller)} - Exec: {enroller.enrollment_start} ")
-    if enroller.enrollment_start < datetime.today():
-        logger.info(f"{user} - Enrollment already started.")
-        scheduler.add_job(enroll, args=(enroller, chat_id))
-    else:
-        scheduler.add_job(enroll, args=(enroller, chat_id), trigger='date', run_date=enroller.enrollment_start)
+    scheduler.add_job(enroll, args=(enroller, chat_id), id=enroller.id, max_instances=1, coalesce=True, trigger='interval', start_date=enroller.enrollment_start, seconds=LESSON_CHECK_INTERVAL)
     return enroller_summary(enroller)
 
 def user_authorized(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -270,25 +278,12 @@ class Response:
         self.chat_id = chat_id
         self.message = message
 
-def message_dispatcher():
-    while True:
-        try:
-            # get messages from queue
-            while not response_queue.empty():
-                response = response_queue.get()
-                asyncio.run(send_message(response))
-        except Exception as e:
-            logger.error(e)
-        time.sleep(1)
 
 
 if __name__ == '__main__':
     scheduler.start()
     application = ApplicationBuilder().token(config["bot"]["token"]).build()
 
-    # Message dispatcher
-    Thread(target=message_dispatcher).start()
-    
     # Handlers
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('help', help))
