@@ -369,7 +369,7 @@ class AsvzEnroller:
             logger.debug("Check if already logged in")
             driver.find_element(By.XPATH, "//button[@class='btn btn-default' and @title='Login']")
         except NoSuchElementException:
-            logger.info("Already logged in")
+            logger.debug("Already logged in")
             return
         except Exception as e:
             logger.error(e)
@@ -430,7 +430,7 @@ class AsvzEnroller:
             )
             driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
-        logger.info("Submitted login credentials")
+        logger.debug("Submitted login credentials")
         time.sleep(3)  # wait until redirect is completed
 
         if not driver.current_url.startswith(LESSON_BASE_URL):
@@ -445,10 +445,15 @@ class AsvzEnroller:
                 return True
             raise LoginFailed("Login failed")
         else:
-            logger.info("Valid login credentials")
+            logger.debug("Valid login credentials")
             return True
 
     def __check_for_free_places(self, driver):
+        if datetime.today() > self.lesson_start:
+            raise LessonStarted(
+                "Stopping enrollment because lesson has started."
+            )
+        
         try:
             driver.find_element(
                 By.XPATH,
@@ -458,10 +463,6 @@ class AsvzEnroller:
             # has free places
             return
 
-        if datetime.today() > self.lesson_start:
-            raise LessonStarted(
-                "Stopping enrollment because lesson has started."
-            )
 
         logger.info("Lesson is full.")
         raise LessonFull()
